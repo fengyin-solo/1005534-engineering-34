@@ -63,6 +63,36 @@
       </tbody>
     </table>
 
+    <h3 class="subhead">年度回顾同步台账</h3>
+    <p class="page-desc ledger-hint">年度回顾的状态变化自动同步到本台账，以回顾编号为唯一键覆盖更新；涉及产品超出目录范围的按无效值标红。</p>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>回顾编号</th>
+          <th>回顾年度</th>
+          <th>涉及产品</th>
+          <th>偏差总数</th>
+          <th>回顾结论</th>
+          <th>审批人</th>
+          <th>回顾状态</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="entry in ledger" :key="String(entry.reviewId)">
+          <td>{{ entry.reviewNo }}</td>
+          <td>{{ entry.year }}</td>
+          <td :class="{ 'error-text': entry.products === '无效产品' }">{{ entry.products }}</td>
+          <td>{{ entry.deviationTotal }}</td>
+          <td>{{ entry.conclusion || '—' }}</td>
+          <td>{{ entry.approver || '未签署' }}</td>
+          <td>{{ entry.status }}</td>
+        </tr>
+        <tr v-if="!ledger.length">
+          <td colspan="7" class="empty-state">台账暂无年度回顾记录</td>
+        </tr>
+      </tbody>
+    </table>
+
     <footer class="page-foot">
       <span>共 {{ total }} 条供应商审计记录</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
@@ -78,8 +108,9 @@ import {
   listEntries,
   moduleMeta,
   runAction as applyAction,
+  supplierAuditLedger,
 } from '@/api/local-service'
-import type { EntryRow } from '@/data/types'
+import type { AuditLedgerEntry, EntryRow } from '@/data/types'
 
 const meta = moduleMeta('supplieraudit')
 const columns = ["审计编号", "供应商名称", "物料类别", "审计方式", "缺陷项数", "审计结论", "整改期限", "审计状态"]
@@ -88,6 +119,7 @@ const statuses = ["待审计", "审计中", "已通过", "需整改"]
 const stats = [{"label": "待审计供应商", "value": 0}, {"label": "审计中供应商", "value": 0}, {"label": "需整改供应商数", "value": 0}]
 
 const rows = ref<EntryRow[]>([])
+const ledger = ref<AuditLedgerEntry[]>([])
 const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
@@ -128,6 +160,7 @@ function reload() {
     const payload = listEntries(meta.key, filters.value)
     rows.value = payload.items
     total.value = payload.total
+    ledger.value = supplierAuditLedger()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '供应商审计列表读取失败'
   }

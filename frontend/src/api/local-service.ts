@@ -1,6 +1,16 @@
+import { approvalBlocked, exportAnnualReviews, syncAuditLedger } from '@/api/annual-review'
 import { MODULE_BY_KEY } from '@/data/modules'
 import { allRows, listRows, resetRows, saveRows } from '@/data/local-store'
-import type { ActionResult, EntryRow, ModuleMeta, OverviewResult, PageResult } from '@/data/types'
+import { normalizeProductSet } from '@/data/products'
+import type {
+  ActionResult,
+  AnnualReviewExportResult,
+  AuditLedgerEntry,
+  EntryRow,
+  ModuleMeta,
+  OverviewResult,
+  PageResult,
+} from '@/data/types'
 
 // 会写进数据的「往回走」动作：命中就把这条记录标成异常态，看板上能一眼看出来。
 const NEGATIVE_ACTIONS = ['撤销', '作废', '拒绝', '驳回', '停用', '忽略', '下线', '回滚']
@@ -30,6 +40,9 @@ export function listEntries(key: string, filters: Record<string, string> = {}): 
 
 export function runAction(key: string, id: number, action: string): ActionResult {
   const meta = moduleMeta(key)
+  if (meta.statelessActions?.includes(action)) {
+    return { ok: false, message: `「${action}」不改变状态，请使用对应业务入口` }
+  }
   const target = meta.actionTargets[action]
   if (!target) {
     return { ok: false, message: `${meta.entity}没有登记「${action}」这个动作` }
@@ -40,9 +53,32 @@ export function runAction(key: string, id: number, action: string): ActionResult
     return { ok: false, message: `没有找到编号为 ${id} 的${meta.entity}` }
   }
   const current = String(rows[index].status)
-  if (current === target) {
+
+  // 登记了状态机的模块：状态只能顺着往下推进，越级/逆序的动作一律拒收
+  if (meta.transitions) {
+    const allowed = meta.transitions[current]
+    const nextByAction = allowed?.[action]
+    if (!allowed || !nextByAction) {
+      return {
+        ok: false,
+        message: `当前状态「${current}」不能执行「${action}」：状态只能逐级推进，不能越级`,
+      }
+    }
+    if (nextByAction !== target) {
+      return { ok: false, message: `「${action}」在当前状态下的目标状态不匹配` }
+    }
+  } else if (current === target) {
     return { ok: false, message: `${meta.entity}已经是「${target}」，不用重复操作` }
   }
+
+  // 年度回顾：批准前必须经审批人签署结论；涉及产品超出目录范围按无效值，同样拦住
+  if (key === 'annualreview' && action === '批准回顾') {
+    const blocked = approvalBlocked(rows[index])
+    if (blocked) {
+      return { ok: false, message: blocked }
+    }
+  }
+
   const lastStatus = meta.statuses[meta.statuses.length - 1]
   const updated: EntryRow = {
     ...rows[index],
@@ -50,10 +86,24 @@ export function runAction(key: string, id: number, action: string): ActionResult
     pending: target !== lastStatus,
     abnormal: NEGATIVE_ACTIONS.some((verb) => action.startsWith(verb)),
   }
+  // 年度回顾：无效产品始终算异常；已退回是流程内退回，不算异常
+  if (key === 'annualreview') {
+    updated.abnormal = normalizeProductSet(updated['涉及产品']) === '无效产品'
+    updated.pending = target !== '已批准'
+  }
   const next = [...rows]
   next[index] = updated
   saveRows(key, next)
+  if (key === 'annualreview') {
+    // 年度回顾状态变化同步到供应商审计台账
+    syncAuditLedger()
+  }
   return { ok: true, message: `${meta.entity}已${action}，当前状态「${target}」` }
+}
+
+// 供应商审计台账：年度回顾状态同步的只读入口
+export function supplierAuditLedger(): AuditLedgerEntry[] {
+  return syncAuditLedger()
 }
 
 export function resetModule(key: string): PageResult {
@@ -71,7 +121,20 @@ export function exportEntries(key: string): { filename: string; content: string 
   return { filename: `${meta.name}-清单.csv`, content: `\uFEFF${lines.join('\n')}` }
 }
 
-export function downloadEntries(key: string): void {
+export function downloadEntries(key: string): AnnualReviewExportResult | { filename: string } {
+  if (key === 'annualreview') {
+    const result = exportAnnualReviews()
+    const blob = new Blob([result.content], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = result.filename
+    document.body.appendChild(anchor)
+    anchor.click()
+    document.body.removeChild(anchor)
+    URL.revokeObjectURL(url)
+    return result
+  }
   const { filename, content } = exportEntries(key)
   const blob = new Blob([content], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
@@ -82,6 +145,7 @@ export function downloadEntries(key: string): void {
   anchor.click()
   document.body.removeChild(anchor)
   URL.revokeObjectURL(url)
+  return { filename }
 }
 
 export function loadOverview(): OverviewResult {

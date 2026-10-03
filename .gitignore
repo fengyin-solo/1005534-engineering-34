@@ -29,6 +29,9 @@ classes/
 *.war
 *.local
 
+# 发布快照（回退旧版用）：每台机器各自发布，不入库
+frontend/releases/
+
 # ===== 包管理器 / 构建缓存 =====
 .npm/
 .cache/

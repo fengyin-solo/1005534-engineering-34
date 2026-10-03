@@ -3,7 +3,7 @@
     <header class="page-head">
       <div>
         <h2>偏差处理管理</h2>
-        <p class="page-desc">维护偏差记录，围绕偏差编号、偏差类型、发生工序、偏差描述做登记、筛选与状态流转。</p>
+        <p class="page-desc">维护偏差记录，围绕偏差编号、涉及产品、偏差类型、发生工序、偏差描述做登记、筛选与状态流转。</p>
       </div>
       <div class="page-actions">
         <button class="btn primary" type="button" @click="openCreate">登记偏差记录</button>
@@ -82,7 +82,7 @@ import {
 import type { EntryRow } from '@/data/types'
 
 const meta = moduleMeta('deviation')
-const columns = ["偏差编号", "偏差类型", "发生工序", "偏差描述", "根本原因", "纠正措施", "责任人", "偏差状态"]
+const columns = ["偏差编号", "涉及产品", "偏差类型", "发生工序", "偏差描述", "根本原因", "纠正措施", "责任人", "偏差状态"]
 const actions = ["提交调查", "关闭偏差", "升级偏差"]
 const statuses = ["待处理", "调查中", "已关闭", "已升级"]
 const stats = [{"label": "待处理偏差", "value": 0}, {"label": "调查中偏差", "value": 0}, {"label": "本月关闭数", "value": 0}]
