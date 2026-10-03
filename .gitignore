@@ -20,6 +20,10 @@ pip-wheel-metadata/
 dist/
 build/
 out/
+# release 脚本归档的历史构建（回退用），不进版本库
+releases/
+# 规则验证的临时打包产物
+.verify-bundle.mjs
 target/
 **/target/
 .gradle/

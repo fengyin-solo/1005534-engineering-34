@@ -63,6 +63,32 @@
       </tbody>
     </table>
 
+    <section class="ledger-block">
+      <h3>年度回顾同步台账</h3>
+      <p class="muted-text">年度回顾的批准状态实时同步到本台账，作为供应商审计评估质量回顾结论的依据。</p>
+      <table class="data-table compact" v-if="reviewLedger.length">
+        <thead>
+          <tr>
+            <th>回顾编号</th><th>回顾年度</th><th>涉及产品</th><th>状态</th><th>审批人</th><th>签署日期</th><th>批次数</th><th>偏差总数</th><th>同步时间</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in reviewLedger" :key="item.reviewId" :class="{ 'invalid-row': !item.productValid }">
+            <td>{{ item.reviewCode }}</td>
+            <td>{{ item.year || '—' }}</td>
+            <td :class="{ 'invalid-text': !item.productValid }">{{ item.product }}</td>
+            <td>{{ item.status }}</td>
+            <td>{{ item.approver || '—' }}</td>
+            <td>{{ item.approvedAt || '—' }}</td>
+            <td>{{ item.batchCount }}</td>
+            <td>{{ item.deviationCount }}</td>
+            <td>{{ formatTime(item.syncedAt) }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p v-else class="muted-text">暂未收到年度回顾状态同步。</p>
+    </section>
+
     <footer class="page-foot">
       <span>共 {{ total }} 条供应商审计记录</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
@@ -76,10 +102,11 @@ import { computed, onMounted, ref } from 'vue'
 import {
   downloadEntries,
   listEntries,
+  listSupplierLedger,
   moduleMeta,
   runAction as applyAction,
 } from '@/api/local-service'
-import type { EntryRow } from '@/data/types'
+import type { EntryRow, SupplierLedgerEntry } from '@/data/types'
 
 const meta = moduleMeta('supplieraudit')
 const columns = ["审计编号", "供应商名称", "物料类别", "审计方式", "缺陷项数", "审计结论", "整改期限", "审计状态"]
@@ -92,6 +119,15 @@ const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
+const reviewLedger = ref<SupplierLedgerEntry[]>([])
+
+function formatTime(iso: string): string {
+  if (!iso) return '—'
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return iso
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
 const statusSummary = computed(() =>
   statuses.map((status: string) => ({
     status,
@@ -128,6 +164,7 @@ function reload() {
     const payload = listEntries(meta.key, filters.value)
     rows.value = payload.items
     total.value = payload.total
+    reviewLedger.value = listSupplierLedger()
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '供应商审计列表读取失败'
   }
@@ -135,3 +172,27 @@ function reload() {
 
 onMounted(reload)
 </script>
+
+<style scoped>
+.ledger-block {
+  margin-top: 24px;
+}
+.ledger-block h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+.muted-text {
+  color: #8a8f99;
+  font-size: 12px;
+}
+.data-table.compact {
+  font-size: 12px;
+}
+.invalid-row {
+  background-color: rgba(214, 48, 49, 0.06);
+}
+.invalid-text {
+  color: #d63031;
+  font-weight: 600;
+}
+</style>
